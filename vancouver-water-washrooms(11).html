@@ -1,0 +1,1080 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>YVR PitStop</title>
+  <meta name="description" content="Find free drinking water and public washrooms in Vancouver"/>
+  <meta name="theme-color" content="#0D3D6B"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="YVR PitStop"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f3; }
+    .app { display: flex; flex-direction: column; height: 100dvh; max-width: 480px; margin: 0 auto; background: #fff; box-shadow: 0 0 0 0.5px rgba(0,0,0,0.1); overflow: hidden; }
+    .header { background: #0D3D6B; border-bottom: none; padding: 14px 14px 10px; flex-shrink: 0; }
+    .header-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .app-title { font-size: 17px; font-weight: 700; color: #fff; letter-spacing: 0.01em; }
+    .app-subtitle { font-size: 11px; color: rgba(255,255,255,0.6); margin-top: 1px; }
+    .app-brand { display: flex; align-items: center; gap: 10px; }
+    .app-icon { width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0; }
+    .locate-btn { padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid rgba(255,255,255,0.35); background: rgba(255,255,255,0.12); color: #fff; display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+    .locate-btn:hover { background: rgba(255,255,255,0.22); }
+    .controls-row { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+    .filter-btn { padding: 5px 11px; border-radius: 20px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.85); display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+    .filter-btn.active-all { background: #fff; border-color: #fff; color: #0D3D6B; }
+    .filter-btn.active-fountain { background: #4AADE8; border-color: #4AADE8; color: #fff; }
+    .filter-btn.active-washroom { background: #D85A30; border-color: #D85A30; color: #fff; }
+    .filter-btn.active-open { background: #3B9E5A; border-color: #3B9E5A; color: #fff; }
+    .filter-btn.active-restspot { background: #7B4FBF; border-color: #7B4FBF; color: #fff; }
+    .item-dot.restspot { background: #3B9E5A; }
+    .popup-type.restspot { color: #3B9E5A; }
+    .search-row { position: relative; }
+    #neighbourhood-input { width: 100%; padding: 8px 32px 8px 12px; font-size: 13px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.12); color: #fff; outline: none; }
+    #neighbourhood-input::placeholder { color: rgba(255,255,255,0.5); }
+    #neighbourhood-input:focus { border-color: rgba(255,255,255,0.5); background: rgba(255,255,255,0.18); }
+    .clear-btn { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: rgba(255,255,255,0.6); font-size: 14px; display: none; }
+    .suggestions { position: absolute; top: calc(100% + 3px); left: 0; right: 0; background: #fff; border: 0.5px solid rgba(0,0,0,0.15); border-radius: 8px; z-index: 1000; max-height: 180px; overflow-y: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: none; }
+    .suggestion-item { padding: 8px 12px; font-size: 13px; cursor: pointer; color: #1a1a18; border-bottom: 0.5px solid rgba(0,0,0,0.06); }
+    .suggestion-item:last-child { border-bottom: none; }
+    .suggestion-item:hover { background: #f5f5f3; }
+    .tabs { display: flex; border-bottom: 0.5px solid rgba(0,0,0,0.1); background: #fff; flex-shrink: 0; }
+    .tab-btn { flex: 1; padding: 9px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; background: transparent; color: #888780; border-bottom: 2px solid transparent; display: flex; align-items: center; justify-content: center; gap: 5px; }
+    .tab-btn.active { color: #0D3D6B; border-bottom-color: #0D3D6B; }
+    /* ── ADD PLACE BUTTON ── */
+    .add-place-btn { position: absolute; bottom: 52px; right: 14px; z-index: 500; width: 52px; height: 52px; border-radius: 50%; background: #0D3D6B; border: none; color: #fff; font-size: 24px; cursor: pointer; box-shadow: 0 3px 12px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; transition: transform 0.15s, background 0.15s; }
+    .add-place-btn:hover { background: #0a2e52; transform: scale(1.05); }
+    /* ── MODAL ── */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 2000; display: none; align-items: flex-end; justify-content: center; }
+    .modal-overlay.visible { display: flex; }
+    .modal-card { background: #fff; border-radius: 20px 20px 0 0; width: 100%; max-width: 480px; max-height: 92vh; overflow-y: auto; padding: 20px 16px 32px; }
+    .modal-drag { width: 36px; height: 4px; background: rgba(0,0,0,0.15); border-radius: 2px; margin: 0 auto 16px; }
+    .modal-title { font-size: 17px; font-weight: 700; color: #1a1a18; margin-bottom: 4px; }
+    .modal-subtitle { font-size: 13px; color: #888780; margin-bottom: 20px; }
+    .form-group { margin-bottom: 14px; }
+    .form-label { font-size: 12px; font-weight: 600; color: #5f5e5a; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; display: block; }
+    .form-label .required { color: #D85A30; margin-left: 2px; }
+    .form-input { width: 100%; padding: 10px 12px; font-size: 14px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.18); background: #f5f5f3; color: #1a1a18; outline: none; font-family: inherit; }
+    .form-input:focus { border-color: #0D3D6B; background: #fff; }
+    .form-select { width: 100%; padding: 10px 12px; font-size: 14px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.18); background: #f5f5f3; color: #1a1a18; outline: none; font-family: inherit; appearance: none; }
+    .form-textarea { width: 100%; padding: 10px 12px; font-size: 14px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.18); background: #f5f5f3; color: #1a1a18; outline: none; font-family: inherit; resize: vertical; min-height: 72px; }
+    .photo-upload { border: 2px dashed rgba(0,0,0,0.18); border-radius: 10px; padding: 20px; text-align: center; cursor: pointer; background: #f5f5f3; transition: border-color 0.15s; position: relative; }
+    .photo-upload:hover { border-color: #0D3D6B; }
+    .photo-upload.has-photo { border-style: solid; border-color: #3B9E5A; padding: 0; overflow: hidden; }
+    .photo-upload img { width: 100%; max-height: 200px; object-fit: cover; border-radius: 8px; display: block; }
+    .photo-upload-text { font-size: 13px; color: #888780; }
+    .photo-upload-text i { font-size: 28px; display: block; margin-bottom: 6px; color: #0D3D6B; }
+    .photo-required-note { font-size: 11px; color: #D85A30; margin-top: 5px; display: none; }
+    .location-pick-row { display: flex; gap: 8px; }
+    .loc-btn { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.18); background: #f5f5f3; font-size: 13px; font-weight: 500; cursor: pointer; color: #1a1a18; display: flex; align-items: center; justify-content: center; gap: 6px; }
+    .loc-btn.active { background: #E6F1FB; border-color: #0D3D6B; color: #0D3D6B; }
+    .loc-coords { font-size: 11px; color: #3B9E5A; margin-top: 5px; min-height: 16px; }
+    .submit-btn { width: 100%; padding: 14px; border-radius: 12px; border: none; background: #0D3D6B; color: #fff; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 6px; transition: background 0.15s; }
+    .submit-btn:hover { background: #0a2e52; }
+    .submit-btn:disabled { background: #aaa; cursor: not-allowed; }
+    .cancel-btn { width: 100%; padding: 12px; border-radius: 12px; border: 1px solid rgba(0,0,0,0.15); background: transparent; color: #5f5e5a; font-size: 14px; font-weight: 500; cursor: pointer; margin-top: 8px; }
+    .success-state { text-align: center; padding: 30px 16px; }
+    .success-state i { font-size: 48px; color: #3B9E5A; display: block; margin-bottom: 12px; }
+    .success-state h3 { font-size: 18px; font-weight: 700; color: #1a1a18; margin-bottom: 8px; }
+    .success-state p { font-size: 14px; color: #888780; line-height: 1.5; }
+    /* pending pin style */
+    .pending-badge { background: #FFF3CD; border: 1px solid #E8A020; border-radius: 4px; padding: 2px 6px; font-size: 10px; color: #8A5500; }
+    #map { flex: 1; width: 100%; min-height: 0; }
+    .list-container { flex: 1; overflow-y: auto; background: #f5f5f3; padding: 8px; display: none; flex-direction: column; gap: 6px; }
+    .location-item { background: #fff; border-radius: 10px; border: 0.5px solid rgba(0,0,0,0.1); padding: 10px 12px; cursor: pointer; }
+    .location-item:hover { border-color: rgba(0,0,0,0.2); }
+    .item-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+    .item-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+    .item-dot.fountain { background: #4AADE8; }
+    .item-dot.washroom { background: #D85A30; }
+    .item-name { font-size: 13px; font-weight: 500; color: #1a1a18; flex: 1; }
+    .item-dist { font-size: 11px; color: #888780; flex-shrink: 0; }
+    .item-meta { font-size: 11px; padding-left: 17px; display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px; }
+    .item-tag { background: #f1efe8; border-radius: 4px; padding: 2px 7px; font-size: 10px; color: #5f5e5a; }
+    .item-tag.accessible { background: #E1F5EE; color: #0F6E56; }
+    .item-tag.hours { background: #E6F1FB; color: #185FA5; }
+    .item-tag.open { background: #EAF3DE; color: #3B6D11; }
+    .fav-btn { background: none; border: none; cursor: pointer; font-size: 16px; padding: 2px 4px; flex-shrink: 0; opacity: 0.4; transition: opacity 0.15s, transform 0.15s; }
+    .fav-btn.active { opacity: 1; }
+    .fav-btn:hover { transform: scale(1.2); opacity: 1; }
+    .fav-section-header { padding: 8px 8px 4px; font-size: 11px; font-weight: 600; color: #888780; text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 5px; }
+    .fav-divider { height: 0.5px; background: rgba(0,0,0,0.08); margin: 6px 8px; }
+    .empty-state { padding: 40px 16px; text-align: center; color: #888780; font-size: 14px; line-height: 1.6; }
+    .empty-state i { font-size: 32px; display: block; margin-bottom: 10px; }
+    /* Leaflet popup */
+    .leaflet-popup-content-wrapper { border-radius: 14px; padding: 0; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
+    .leaflet-popup-content { margin: 0; width: 260px !important; }
+    .leaflet-popup-tip-container { display: none; }
+    .popup-inner { padding: 14px 14px 10px; }
+    .popup-type { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 3px; }
+    .popup-type.fountain { color: #4AADE8; }
+    .popup-type.washroom { color: #D85A30; }
+    .popup-name { font-size: 14px; font-weight: 600; color: #1a1a18; margin-bottom: 10px; line-height: 1.3; }
+    .popup-rows { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+    .popup-row { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; }
+    .popup-row i { font-size: 14px; color: #888780; flex-shrink: 0; margin-top: 1px; }
+    .popup-row .label { color: #888780; min-width: 72px; }
+    .popup-row .val { color: #1a1a18; flex: 1; }
+    .popup-fav-btn { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; padding: 9px; background: #f5f5f3; color: #5f5e5a; font-size: 13px; font-weight: 500; border: none; border-top: 0.5px solid rgba(0,0,0,0.08); cursor: pointer; }
+    .popup-fav-btn.active { background: #FFF8E6; color: #B8740A; }
+    .popup-directions { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; padding: 10px; background: #0D3D6B; color: #fff; font-size: 13px; font-weight: 500; text-decoration: none; border-top: 0.5px solid rgba(0,0,0,0.08); }
+    .popup-directions:hover { background: #0a2e52; }
+    .status-bar { padding: 6px 14px; font-size: 11px; color: #888780; background: #f5f5f3; border-top: 0.5px solid rgba(0,0,0,0.08); display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+    .dot-loading { width: 6px; height: 6px; border-radius: 50%; background: #185FA5; animation: pulse 1s infinite; flex-shrink: 0; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    .legend { display: flex; gap: 12px; align-items: center; margin-left: auto; }
+    .legend-item { display: flex; align-items: center; gap: 4px; font-size: 10px; color: #5f5e5a; }
+    .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+    @media (min-width: 480px) { .app { border-radius: 16px; margin: 20px auto; height: calc(100dvh - 40px); } }
+  </style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="header-top">
+      <div class="app-brand">
+        <svg class="app-icon" viewBox="0 0 180 180" xmlns="http://www.w3.org/2000/svg">
+          <rect width="180" height="180" rx="40" fill="#0D3D6B"/>
+          <path d="M90 28 C90 28 50 72 50 97 C50 121 68 140 90 140 C112 140 130 121 130 97 C130 72 90 28 90 28Z" fill="#4AADE8"/>
+          <path d="M72 114 C72 114 60 102 60 91" stroke="white" stroke-width="5" stroke-linecap="round" fill="none" opacity="0.4"/>
+          <text x="90" y="166" text-anchor="middle" font-family="sans-serif" font-weight="800" font-size="22" fill="#4AADE8" letter-spacing="3">YVR</text>
+        </svg>
+        <div>
+          <div class="app-title">YVR PitStop</div>
+          <div class="app-subtitle">Free drinking water &amp; public washrooms in Vancouver</div>
+        </div>
+      </div>
+      <button class="locate-btn" id="locate-btn">
+        <i class="ti ti-current-location"></i> Near me
+      </button>
+    </div>
+    <div class="controls-row">
+      <button class="filter-btn active-all" id="btn-all">All</button>
+      <button class="filter-btn" id="btn-fountain"><i class="ti ti-droplet"></i> Free Drinking Water</button>
+      <button class="filter-btn" id="btn-washroom"><i class="ti ti-toilet-paper"></i> Public Washrooms</button>
+      <button class="filter-btn" id="btn-restspot"><i class="ti ti-armchair"></i> Rest Spots</button>
+      <button class="filter-btn" id="btn-open"><i class="ti ti-clock"></i> Open now</button>
+    </div>
+    <div class="search-row">
+      <input id="neighbourhood-input" type="text" placeholder="Search neighbourhood (e.g. Kitsilano)" autocomplete="off"/>
+      <button class="clear-btn" id="clear-btn"><i class="ti ti-x"></i></button>
+      <div class="suggestions" id="suggestions"></div>
+    </div>
+  </div>
+  <div class="tabs">
+    <button class="tab-btn active" id="tab-map"><i class="ti ti-map-2"></i> Map</button>
+    <button class="tab-btn" id="tab-list"><i class="ti ti-list"></i> List</button>
+    <button class="tab-btn" id="tab-favs"><i class="ti ti-star"></i> Saved</button>
+  </div>
+  <div id="map">
+    <button class="add-place-btn" id="add-place-btn" title="Add a place">
+      <i class="ti ti-plus"></i>
+    </button>
+  </div>
+  <div class="list-container" id="list-view"></div>
+  <div class="list-container" id="favs-view"></div>
+  <div class="status-bar">
+    <div class="dot-loading" id="loading-dot"></div>
+    <span id="status-text">Loading data...</span>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#4AADE8"></div> Free Water</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#D85A30"></div> Washroom</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#3B9E5A"></div> Rest Spot</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── CONTRIBUTION MODAL ── -->
+<div class="modal-overlay" id="contrib-modal">
+  <div class="modal-card">
+    <div class="modal-drag"></div>
+    <div id="contrib-form-view">
+      <div class="modal-title">Add a Place</div>
+      <div class="modal-subtitle">Help others find free water &amp; washrooms. Your submission will be reviewed before it appears on the map.</div>
+
+      <div class="form-group">
+        <label class="form-label">Type <span class="required">*</span></label>
+        <select class="form-select" id="contrib-type">
+          <option value="">Select type...</option>
+          <option value="fountain">Free Drinking Water</option>
+          <option value="washroom">Public Washroom</option>
+          <option value="restspot">Rest Spot (bench, park, plaza)</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Name / Description <span class="required">*</span></label>
+        <input class="form-input" id="contrib-name" type="text" placeholder="e.g. Water fountain near Starbucks on Robson"/>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Notes</label>
+        <textarea class="form-textarea" id="contrib-notes" placeholder="Any helpful details — e.g. accessible, seasonal, inside a building..."></textarea>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Photo <span class="required">*</span></label>
+        <div class="photo-upload" id="photo-upload-area" onclick="document.getElementById('photo-input').click()">
+          <div class="photo-upload-text">
+            <i class="ti ti-camera"></i>
+            Tap to take a photo or upload one
+          </div>
+          <input type="file" id="photo-input" accept="image/*" capture="environment" style="display:none"/>
+        </div>
+        <div class="photo-required-note" id="photo-required-note">📷 A photo is required to submit</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Location <span class="required">*</span></label>
+        <div class="location-pick-row">
+          <button class="loc-btn" id="use-gps-btn"><i class="ti ti-current-location"></i> Use my GPS</button>
+          <button class="loc-btn" id="use-map-btn"><i class="ti ti-map-pin"></i> Pick on map</button>
+        </div>
+        <div class="loc-coords" id="loc-coords"></div>
+      </div>
+
+      <button class="submit-btn" id="submit-contrib-btn">Submit for Review</button>
+      <button class="cancel-btn" id="cancel-contrib-btn">Cancel</button>
+    </div>
+
+    <div class="success-state" id="contrib-success-view" style="display:none">
+      <i class="ti ti-circle-check"></i>
+      <h3>Thank you!</h3>
+      <p>Your submission has been received and will be reviewed before appearing on the map. We appreciate you helping the YVR community!</p>
+      <button class="submit-btn" id="success-close-btn" style="margin-top:20px">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MAP PIN PICKER OVERLAY ── -->
+<div class="modal-overlay" id="pin-picker-overlay" style="background:rgba(0,0,0,0.6);align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:14px;padding:14px 16px;text-align:center;max-width:320px;width:90%;position:relative;z-index:2001;">
+    <div style="font-size:14px;font-weight:600;color:#1a1a18;margin-bottom:6px;">Tap the map to place a pin</div>
+    <div style="font-size:12px;color:#888780;margin-bottom:12px;">Tap exactly where the place is located</div>
+    <button onclick="cancelPinPick()" style="padding:8px 20px;border-radius:8px;border:1px solid rgba(0,0,0,0.15);background:#f5f5f3;font-size:13px;cursor:pointer;">Cancel</button>
+  </div>
+</div>
+<script>
+// ── MAP ──────────────────────────────────────────────────────────────
+const map = L.map('map', { zoomControl: true }).setView([49.248, -123.120], 12);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; <a href="https://openstreetmap.org">OpenStreetMap</a> &copy; <a href="https://carto.com">CARTO</a>',
+  subdomains: 'abcd', maxZoom: 19
+}).addTo(map);
+setTimeout(() => map.invalidateSize(), 300);
+
+// ── STATE ─────────────────────────────────────────────────────────────
+let all = [], filtered = [], currentFilter = 'all', showOpenOnly = false;
+let userLat = null, userLng = null, activeTab = 'map';
+let neighbourhoodFilter = '', allNeighbourhoods = [];
+const markerLayer = L.layerGroup().addTo(map);
+let userMarker = null;
+
+// ── FAVOURITES ────────────────────────────────────────────────────────
+function favKey(loc) { return loc.type + '|' + loc.lat.toFixed(5) + '|' + loc.lng.toFixed(5); }
+function loadFavs() { try { return JSON.parse(localStorage.getItem('van_ww_favs') || '{}'); } catch(e) { return {}; } }
+function saveFavs(f) { try { localStorage.setItem('van_ww_favs', JSON.stringify(f)); } catch(e) {} }
+function isFav(loc) { return !!loadFavs()[favKey(loc)]; }
+function toggleFav(loc) {
+  const f = loadFavs(), k = favKey(loc);
+  if (f[k]) delete f[k]; else f[k] = loc;
+  saveFavs(f);
+}
+function getFavsList() { return Object.values(loadFavs()); }
+
+// ── DATA FETCHING ─────────────────────────────────────────────────────
+const PROXIES = [
+  u => 'https://corsproxy.io/?' + encodeURIComponent(u),
+  u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u),
+  u => 'https://thingproxy.freeboard.io/fetch/' + u
+];
+const F_URL = 'https://opendata.vancouver.ca/api/explore/v2.1/catalog/datasets/drinking-fountains/exports/json?lang=en&timezone=America%2FVancouver';
+const W_URL = 'https://opendata.vancouver.ca/api/explore/v2.1/catalog/datasets/public-washrooms/exports/json?lang=en&timezone=America%2FVancouver';
+
+// Overpass query: benches, parks, plazas, libraries, free leisure spaces in Vancouver bbox
+// fee!=yes ensures we only get free spaces
+const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
+const OVERPASS_QUERY = '[out:json][timeout:30];('
+  + 'node["amenity"="bench"](49.195,-123.230,49.315,-123.020);'
+  + 'node["leisure"="park"](49.195,-123.230,49.315,-123.020);'
+  + 'way["leisure"="park"](49.195,-123.230,49.315,-123.020);'
+  + 'node["amenity"="library"](49.195,-123.230,49.315,-123.020);'
+  + 'node["leisure"="plaza"](49.195,-123.230,49.315,-123.020);'
+  + 'way["leisure"="plaza"](49.195,-123.230,49.315,-123.020);'
+  + 'node["place"="square"](49.195,-123.230,49.315,-123.020);'
+  + 'node["amenity"="community_centre"]["fee"!="yes"](49.195,-123.230,49.315,-123.020);'
+  + 'node["tourism"="artwork"]["access"!="private"](49.195,-123.230,49.315,-123.020);'
+  + ');out center;';
+
+async function fetchWithProxy(url) {
+  try { const r = await fetch(url, {mode:'cors'}); if (r.ok) return r.json(); } catch(e) {}
+  for (let i = 0; i < PROXIES.length; i++) {
+    try {
+      updateStatus('Trying proxy ' + (i+1) + '...');
+      const r = await fetch(PROXIES[i](url));
+      if (r.ok) return JSON.parse(await r.text());
+    } catch(e) {}
+  }
+  throw new Error('All proxies failed');
+}
+
+function getCoords(r) {
+  if (r.geo_point_2d) {
+    if (Array.isArray(r.geo_point_2d)) return { lat: +r.geo_point_2d[0], lng: +r.geo_point_2d[1] };
+    if (r.geo_point_2d.lat != null) return { lat: +r.geo_point_2d.lat, lng: +r.geo_point_2d.lon };
+  }
+  if (r.geom && r.geom.geometry) { var c=r.geom.geometry.coordinates; return {lat:+c[1],lng:+c[0]}; }
+  if (r.location_1) {
+    if (r.location_1.lat != null) return {lat:+r.location_1.lat, lng:+r.location_1.lon};
+    if (r.location_1.geometry) { var c=r.location_1.geometry.coordinates; return {lat:+c[1],lng:+c[0]}; }
+  }
+  if (r.location) {
+    if (r.location.lat != null) return {lat:+r.location.lat, lng:+r.location.lon};
+    if (r.location.geometry) { var c=r.location.geometry.coordinates; return {lat:+c[1],lng:+c[0]}; }
+  }
+  if (r.latitude != null) return {lat:+r.latitude, lng:+r.longitude};
+  return null;
+}
+
+async function fetchRestSpots() {
+  try {
+    var res = await fetch(OVERPASS_URL, {
+      method: 'POST',
+      body: 'data=' + encodeURIComponent(OVERPASS_QUERY)
+    });
+    if (!res.ok) throw new Error('Overpass error');
+    var data = await res.json();
+    var items = (data.elements || []).map(function(el) {
+      var lat = el.lat || (el.center && el.center.lat);
+      var lng = el.lon || (el.center && el.center.lon);
+      if (!lat || !lng) return null;
+      if (lat < 49.1 || lat > 49.4 || lng < -123.3 || lng > -122.9) return null;
+      var tags = el.tags || {};
+      var fee = (tags.fee || '').toLowerCase();
+      if (fee === 'yes') return null; // skip paid places
+      var access = (tags.access || '').toLowerCase();
+      if (access === 'private' || access === 'no') return null;
+
+      // Determine subtype and label
+      var subtype, label, icon;
+      if (tags.amenity === 'bench') {
+        subtype = 'bench';
+        label = tags.name || 'Public Bench';
+        icon = 'ti-armchair';
+      } else if (tags.leisure === 'park' || tags.leisure === 'garden') {
+        subtype = 'park';
+        label = tags.name || 'Park';
+        icon = 'ti-tree';
+      } else if (tags.amenity === 'library') {
+        subtype = 'library';
+        label = tags.name || 'Public Library';
+        icon = 'ti-book';
+      } else if (tags.leisure === 'plaza' || tags.place === 'square') {
+        subtype = 'plaza';
+        label = tags.name || 'Public Plaza';
+        icon = 'ti-building-community';
+      } else if (tags.amenity === 'community_centre') {
+        subtype = 'community-centre';
+        label = tags.name || 'Community Centre';
+        icon = 'ti-users';
+      } else {
+        subtype = 'restspot';
+        label = tags.name || 'Rest Spot';
+        icon = 'ti-armchair';
+      }
+
+      return {
+        type: 'restspot',
+        subtype: subtype,
+        name: label,
+        lat: lat, lng: lng,
+        neighbourhood: tags['addr:suburb'] || tags.neighbourhood || '',
+        extra: {
+          subtype: subtype,
+          address: tags['addr:street'] ? (tags['addr:housenumber'] ? tags['addr:housenumber']+' ' : '') + tags['addr:street'] : '',
+          backrest: tags.backrest || '',
+          seats: tags.seats || '',
+          opening_hours: tags.opening_hours || '',
+          wheelchair: tags.wheelchair || '',
+          description: tags.description || ''
+        }
+      };
+    }).filter(Boolean);
+    return items;
+  } catch(e) {
+    console.log('Overpass failed:', e);
+    return [];
+  }
+}
+
+async function fetchData() {
+  updateStatus('Loading data...');
+  try {
+    var results = await Promise.all([
+      fetchWithProxy(F_URL),
+      fetchWithProxy(W_URL),
+      fetchRestSpots()
+    ]);
+    var fData = results[0], wData = results[1], restData = results[2];
+    var fArr = Array.isArray(fData) ? fData : (fData.results || []);
+    var wArr = Array.isArray(wData) ? wData : (wData.results || []);
+
+    var fountains = fArr.map(function(r) {
+      var c = getCoords(r); if (!c) return null;
+      if (c.lat < 49.1 || c.lat > 49.4 || c.lng < -123.3 || c.lng > -122.9) return null;
+      return { type:'fountain', name:r.name||'Free Drinking Water', lat:c.lat, lng:c.lng,
+        neighbourhood:r.geo_local_area||r.neighbourhood||'',
+        extra:{ status:r.in_operation||r.status||'', petFriendly:r.pet_friendly||'',
+          bottleFill:r.bottle_filling||'', maintainer:r.maintainer||'' }};
+    }).filter(Boolean);
+
+    var washrooms = wArr.map(function(r) {
+      var c = getCoords(r); if (!c) return null;
+      if (c.lat < 49.1 || c.lat > 49.4 || c.lng < -123.3 || c.lng > -122.9) return null;
+      return { type:'washroom', name:r.name||'Public Washroom', lat:c.lat, lng:c.lng,
+        neighbourhood:r.geo_local_area||r.neighbourhood||'',
+        extra:{ area:r.geo_local_area||'', kind:r.type||'', wheelchair:r.wheelchair||'',
+          summer:r.summer_hours||'', winter:r.winter_hours||'' }};
+    }).filter(Boolean);
+
+    all = fountains.concat(washrooms).concat(restData);
+    allNeighbourhoods = all.map(function(l){return l.neighbourhood;})
+      .filter(function(n,i,a){return n && a.indexOf(n)===i;}).sort();
+    updateStatus(fountains.length + ' water · ' + washrooms.length + ' washrooms · ' + restData.length + ' rest spots');
+    applyFilters();
+  } catch(err) {
+    updateStatus('Failed to load — check internet connection');
+  }
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────────
+function getVancouverTime() {
+  return new Date(new Date().toLocaleString('en-US', {timeZone:'America/Vancouver'}));
+}
+function haversine(a,b,c,d) {
+  var R=6371,dLa=(c-a)*Math.PI/180,dLo=(d-b)*Math.PI/180;
+  var x=Math.sin(dLa/2)*Math.sin(dLa/2)+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dLo/2)*Math.sin(dLo/2);
+  return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+}
+function parseHours(s) {
+  if (!s) return null;
+  var m=s.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*[-\u2013to]+\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+  if (!m) return null;
+  var sh=+m[1],sm=+(m[2]||0),sa=(m[3]||'').toLowerCase();
+  var eh=+m[4],em=+(m[5]||0),ea=(m[6]||'').toLowerCase();
+  if(sa==='pm'&&sh!==12)sh+=12; if(sa==='am'&&sh===12)sh=0;
+  if(ea==='pm'&&eh!==12)eh+=12; if(ea==='am'&&eh===12)eh=0;
+  return {open:sh*60+sm, close:eh*60+em};
+}
+function isOpenNow(loc) {
+  var now=getVancouverTime(), mins=now.getHours()*60+now.getMinutes();
+  var isSummer=now.getMonth()>=4&&now.getMonth()<=8;
+  if (loc.type==='fountain') {
+    var s=(loc.extra.status||'').toLowerCase();
+    if(s.indexOf('out of service')>=0||s.indexOf('removed')>=0) return false;
+    if(s.indexOf('winter only')>=0&&isSummer) return false;
+    if(s.indexOf('summer only')>=0&&!isSummer) return false;
+    return true;
+  }
+  var hrs=isSummer?loc.extra.summer:loc.extra.winter;
+  if(!hrs) return true;
+  var l=hrs.toLowerCase();
+  if(l.indexOf('24')>=0||l.indexOf('always')>=0) return true;
+  if(l.indexOf('closed')>=0) return false;
+  var p=parseHours(hrs); if(!p) return true;
+  return mins>=p.open&&mins<=p.close;
+}
+
+// ── ICONS ─────────────────────────────────────────────────────────────
+function makeIcon(type, faved) {
+  var color = type==='fountain' ? '#4AADE8' : type==='washroom' ? '#D85A30' : '#3B9E5A';
+  var star = faved ? '<div style="position:absolute;top:-8px;right:-8px;font-size:10px;line-height:1">⭐</div>' : '';
+  return L.divIcon({
+    className: '',
+    html: '<div style="position:relative;width:14px;height:14px;border-radius:50%;background:'+color+';border:2.5px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.3)">'+star+'</div>',
+    iconSize: [14,14], iconAnchor: [7,7], popupAnchor: [0,-10]
+  });
+}
+
+// ── FILTERS & RENDER ──────────────────────────────────────────────────
+function applyFilters() {
+  filtered = all.filter(function(l) {
+    if (currentFilter === 'restspot') {
+      if (l.type !== 'restspot') return false;
+    } else if (currentFilter !== 'all') {
+      if (l.type !== currentFilter) return false;
+    }
+    if (showOpenOnly && !isOpenNow(l)) return false;
+    if (neighbourhoodFilter && (l.neighbourhood||'').toLowerCase().indexOf(neighbourhoodFilter.toLowerCase()) < 0) return false;
+    return true;
+  });
+  if (userLat !== null) {
+    filtered = filtered.map(function(l) {
+      return Object.assign({}, l, {distKm: haversine(userLat,userLng,l.lat,l.lng)});
+    });
+    filtered.sort(function(a,b){return a.distKm-b.distKm;});
+  }
+  updateStatus('Showing ' + filtered.length + ' of ' + all.length + ' locations');
+  renderMarkers();
+  if (activeTab==='list') renderList();
+  if (activeTab==='favs') renderFavs();
+}
+
+function renderMarkers() {
+  markerLayer.clearLayers();
+  filtered.forEach(function(loc) {
+    var m = L.marker([loc.lat, loc.lng], {icon: makeIcon(loc.type, isFav(loc))});
+    m.bindPopup(buildPopupHtml(loc), {maxWidth:280, minWidth:260});
+    markerLayer.addLayer(m);
+  });
+  if (neighbourhoodFilter && filtered.length > 0) {
+    var lls = filtered.map(function(l){return [l.lat,l.lng];});
+    map.fitBounds(L.latLngBounds(lls).pad(0.2));
+  }
+}
+
+// ── POPUP ─────────────────────────────────────────────────────────────
+// Store loc data in a global registry keyed by index to avoid attribute quoting issues
+var popupRegistry = {};
+var popupCounter = 0;
+
+function buildPopupHtml(loc) {
+  var idx = popupCounter++;
+  popupRegistry[idx] = loc;
+  var open = isOpenNow(loc);
+  var isSummer = getVancouverTime().getMonth()>=4&&getVancouverTime().getMonth()<=8;
+  var rows = '';
+  rows += prow('ti-activity','Status','<span style="color:'+(open?'#3B6D11':'#993C1D')+';font-weight:500">'+(open?'Open now':'Closed / Check hours')+'</span>');
+  if (loc.neighbourhood) rows += prow('ti-map-pin','Area',loc.neighbourhood);
+  if (loc.type==='fountain') {
+    if (loc.extra.status) rows += prow('ti-info-circle','Operation',loc.extra.status);
+    if (loc.extra.bottleFill) rows += prow('ti-bottle','Bottle fill',loc.extra.bottleFill==='Y'?'Yes':'No');
+    if (loc.extra.petFriendly) rows += prow('ti-paw','Pet friendly',loc.extra.petFriendly==='Y'?'Yes':'No');
+    if (loc.extra.maintainer) rows += prow('ti-building-community','By',loc.extra.maintainer);
+  } else if (loc.type==='washroom') {
+    if (loc.extra.kind) rows += prow('ti-door','Type',loc.extra.kind);
+    if (loc.extra.wheelchair) rows += prow('ti-wheelchair','Accessible',loc.extra.wheelchair==='Y'?'Yes':'No');
+    var hrs = isSummer?loc.extra.summer:loc.extra.winter;
+    if (hrs) rows += prow('ti-clock','Hours',hrs);
+  } else if (loc.type==='restspot') {
+    var sub = loc.extra.subtype || 'restspot';
+    if (sub==='bench') {
+      rows += prow('ti-armchair','Type','Public Bench — free to use');
+      if (loc.extra.backrest==='yes') rows += prow('ti-check','Backrest','Yes');
+      if (loc.extra.seats) rows += prow('ti-users','Seats',loc.extra.seats);
+      if (loc.extra.wheelchair==='yes') rows += prow('ti-wheelchair','Accessible','Yes');
+    } else if (sub==='park') {
+      rows += prow('ti-tree','Type','Park — free outdoor seating');
+      if (loc.extra.opening_hours) rows += prow('ti-clock','Hours',loc.extra.opening_hours);
+    } else if (sub==='library') {
+      rows += prow('ti-book','Type','Public Library');
+      rows += prow('ti-wifi','Free WiFi','Available inside');
+      if (loc.extra.opening_hours) rows += prow('ti-clock','Hours',loc.extra.opening_hours);
+    } else if (sub==='plaza') {
+      rows += prow('ti-building-community','Type','Public Plaza — free seating');
+      rows += prow('ti-sun','Outdoors','Open public space');
+    } else if (sub==='community-centre') {
+      rows += prow('ti-users','Type','Community Centre');
+      rows += prow('ti-armchair','Indoor','Free seating available');
+      if (loc.extra.opening_hours) rows += prow('ti-clock','Hours',loc.extra.opening_hours);
+    } else {
+      rows += prow('ti-armchair','Type','Free public rest spot');
+    }
+    if (loc.extra.description) rows += prow('ti-info-circle','Note',loc.extra.description);
+  }
+  if (loc.distKm!=null) rows += prow('ti-walk','Distance',loc.distKm<1?Math.round(loc.distKm*1000)+'m away':loc.distKm.toFixed(1)+'km away');
+  var mapsUrl = 'https://www.google.com/maps/dir/?api=1&destination='+loc.lat+','+loc.lng+'&travelmode=walking';
+  var faved = isFav(loc);
+  return '<div class="popup-inner">'
+    + '<div class="popup-type restspot">'
+  + (loc.type==='fountain'?'Free Drinking Water'
+    :loc.type==='washroom'?'Public Washroom'
+    :loc.extra.subtype==='bench'?'Public Bench'
+    :loc.extra.subtype==='park'?'Park'
+    :loc.extra.subtype==='library'?'Public Library'
+    :loc.extra.subtype==='plaza'?'Public Plaza'
+    :loc.extra.subtype==='community-centre'?'Community Centre'
+    :'Rest Spot')
+  + '</div>'
+    + '<div class="popup-name">'+loc.name+'</div>'
+    + '<div class="popup-rows">'+rows+'</div>'
+    + '</div>'
+    + '<button class="popup-fav-btn'+(faved?' active':'')+'" onclick="popupToggleFav('+idx+',this)">'
+    + '<i class="ti '+(faved?'ti-star-filled':'ti-star')+'"></i> '+(faved?'Saved':'Save to favourites')
+    + '</button>'
+    + '<a class="popup-directions" href="'+mapsUrl+'" target="_blank" rel="noopener">'
+    + '<i class="ti ti-navigation"></i> Get directions</a>';
+}
+
+function prow(icon, label, value) {
+  return '<div class="popup-row"><i class="ti '+icon+'"></i><span class="label">'+label+'</span><span class="val">'+value+'</span></div>';
+}
+
+function popupToggleFav(idx, btn) {
+  var loc = popupRegistry[idx];
+  toggleFav(loc);
+  var now = isFav(loc);
+  btn.className = 'popup-fav-btn' + (now?' active':'');
+  btn.innerHTML = '<i class="ti '+(now?'ti-star-filled':'ti-star')+'"></i> '+(now?'Saved':'Save to favourites');
+  renderMarkers();
+  if (activeTab==='favs') renderFavs();
+}
+
+// ── LIST ──────────────────────────────────────────────────────────────
+var listRegistry = {};
+var listCounter = 0;
+
+function renderList() {
+  var container = document.getElementById('list-view');
+  if (!filtered.length) {
+    container.innerHTML = '<div class="empty-state"><i class="ti ti-search-off"></i>No locations match your filters</div>';
+    return;
+  }
+  var isSummer = getVancouverTime().getMonth()>=4&&getVancouverTime().getMonth()<=8;
+  var html = filtered.slice(0,120).map(function(loc) {
+    var idx = listCounter++;
+    listRegistry[idx] = loc;
+    var distHtml = loc.distKm!=null ? '<span class="item-dist">'+(loc.distKm<1?Math.round(loc.distKm*1000)+'m':loc.distKm.toFixed(1)+'km')+'</span>' : '';
+    var tags = [];
+    if (loc.neighbourhood) tags.push('<span class="item-tag">'+loc.neighbourhood+'</span>');
+    if (isOpenNow(loc)) tags.push('<span class="item-tag open">Open now</span>');
+    if (loc.type==='fountain') {
+      if (loc.extra.bottleFill==='Y') tags.push('<span class="item-tag">Bottle fill</span>');
+      if (loc.extra.petFriendly==='Y') tags.push('<span class="item-tag">Pet friendly</span>');
+    } else if (loc.type==='washroom') {
+      if (loc.extra.wheelchair==='Y') tags.push('<span class="item-tag accessible">&#9855; Accessible</span>');
+      var hrs = isSummer?loc.extra.summer:loc.extra.winter;
+      if (hrs) tags.push('<span class="item-tag hours">'+hrs+'</span>');
+    } else if (loc.type==='restspot') {
+      var sub = loc.extra.subtype||'restspot';
+      var tagLabel = sub==='bench'?'Public Bench':sub==='park'?'Park':sub==='library'?'Library · WiFi':sub==='plaza'?'Public Plaza':sub==='community-centre'?'Community Centre':'Rest Spot';
+      tags.push('<span class="item-tag" style="background:#EAF5EE;color:#1E6B3A">'+tagLabel+'</span>');
+    }
+    var faved = isFav(loc);
+    return '<div class="location-item" onclick="listOpenItem('+idx+')">'
+      + '<div class="item-header">'
+      + '<div class="item-dot '+loc.type+'"></div>'
+      + '<div class="item-name">'+loc.name+'</div>'
+      + distHtml
+      + '<button class="fav-btn'+(faved?' active':'')+'" onclick="event.stopPropagation();listToggleFav('+idx+',this)">'+(faved?'⭐':'☆')+'</button>'
+      + '</div>'
+      + (tags.length ? '<div class="item-meta">'+tags.join('')+'</div>' : '')
+      + '</div>';
+  }).join('');
+  container.innerHTML = html;
+}
+
+function listOpenItem(idx) {
+  var loc = listRegistry[idx];
+  showTab('map');
+  map.setView([loc.lat, loc.lng], 16);
+  markerLayer.eachLayer(function(m) {
+    if (Math.abs(m.getLatLng().lat-loc.lat)<0.0001 && Math.abs(m.getLatLng().lng-loc.lng)<0.0001) m.openPopup();
+  });
+}
+
+function listToggleFav(idx, btn) {
+  var loc = listRegistry[idx];
+  toggleFav(loc);
+  var now = isFav(loc);
+  btn.textContent = now ? '⭐' : '☆';
+  btn.className = 'fav-btn' + (now?' active':'');
+  renderMarkers();
+  if (activeTab==='favs') renderFavs();
+}
+
+// ── FAVOURITES VIEW ───────────────────────────────────────────────────
+var favsRegistry = {};
+var favsCounter = 0;
+
+function renderFavs() {
+  var container = document.getElementById('favs-view');
+  var favs = getFavsList();
+  if (!favs.length) {
+    container.innerHTML = '<div class="empty-state"><i class="ti ti-star" style="color:#E8A020"></i>No saved locations yet.<br><small style="display:block;margin-top:6px;font-size:12px">Tap &#9734; on any item to save it here.</small></div>';
+    return;
+  }
+  if (userLat !== null) {
+    favs = favs.map(function(l){return Object.assign({},l,{distKm:haversine(userLat,userLng,l.lat,l.lng)});});
+    favs.sort(function(a,b){return a.distKm-b.distKm;});
+  }
+  var isSummer = getVancouverTime().getMonth()>=4&&getVancouverTime().getMonth()<=8;
+  var fountains = favs.filter(function(l){return l.type==='fountain';});
+  var washrooms = favs.filter(function(l){return l.type==='washroom';});
+  var restspots = favs.filter(function(l){return l.type==='restspot';});
+
+  function buildGroup(items) {
+    return items.map(function(loc) {
+      var idx = favsCounter++;
+      favsRegistry[idx] = loc;
+      var distHtml = loc.distKm!=null ? '<span class="item-dist">'+(loc.distKm<1?Math.round(loc.distKm*1000)+'m':loc.distKm.toFixed(1)+'km')+'</span>' : '';
+      var tags = [];
+      if (loc.neighbourhood) tags.push('<span class="item-tag">'+loc.neighbourhood+'</span>');
+      if (isOpenNow(loc)) tags.push('<span class="item-tag open">Open now</span>');
+      if (loc.type==='fountain') {
+        if (loc.extra.bottleFill==='Y') tags.push('<span class="item-tag">Bottle fill</span>');
+        if (loc.extra.petFriendly==='Y') tags.push('<span class="item-tag">Pet friendly</span>');
+      } else if (loc.type==='washroom') {
+        if (loc.extra.wheelchair==='Y') tags.push('<span class="item-tag accessible">&#9855; Accessible</span>');
+        var hrs2 = isSummer?loc.extra.summer:loc.extra.winter;
+        if (hrs2) tags.push('<span class="item-tag hours">'+hrs2+'</span>');
+      } else if (loc.type==='restspot') {
+        var sub2 = loc.extra.subtype||'restspot';
+        var tagLabel2 = sub2==='bench'?'Public Bench':sub2==='park'?'Park':sub2==='library'?'Library · WiFi':sub2==='plaza'?'Public Plaza':sub2==='community-centre'?'Community Centre':'Rest Spot';
+        tags.push('<span class="item-tag" style="background:#EAF5EE;color:#1E6B3A">'+tagLabel2+'</span>');
+      }
+      return '<div class="location-item" onclick="favsOpenItem('+idx+')">'
+        + '<div class="item-header">'
+        + '<div class="item-dot '+loc.type+'"></div>'
+        + '<div class="item-name">'+loc.name+'</div>'
+        + distHtml
+        + '<button class="fav-btn active" onclick="event.stopPropagation();favsRemove('+idx+',this)" title="Remove">&#11088;</button>'
+        + '</div>'
+        + (tags.length ? '<div class="item-meta">'+tags.join('')+'</div>' : '')
+        + '</div>';
+    }).join('');
+  }
+
+  var html = '';
+  if (fountains.length) {
+    html += '<div class="fav-section-header"><i class="ti ti-droplet" style="color:#4AADE8"></i> Free Drinking Water ('+fountains.length+')</div>';
+    html += buildGroup(fountains);
+  }
+  if (washrooms.length) {
+    if (fountains.length) html += '<div class="fav-divider"></div>';
+    html += '<div class="fav-section-header"><i class="ti ti-toilet-paper" style="color:#D85A30"></i> Public Washrooms ('+washrooms.length+')</div>';
+    html += buildGroup(washrooms);
+  }
+  if (restspots.length) {
+    if (fountains.length || washrooms.length) html += '<div class="fav-divider"></div>';
+    html += '<div class="fav-section-header"><i class="ti ti-armchair" style="color:#7B4FBF"></i> Rest Spots ('+restspots.length+')</div>';
+    html += buildGroup(restspots);
+  }
+  container.innerHTML = html;
+}
+
+function favsOpenItem(idx) {
+  var loc = favsRegistry[idx];
+  showTab('map');
+  map.setView([loc.lat, loc.lng], 16);
+  markerLayer.eachLayer(function(m) {
+    if (Math.abs(m.getLatLng().lat-loc.lat)<0.0001 && Math.abs(m.getLatLng().lng-loc.lng)<0.0001) m.openPopup();
+  });
+}
+
+function favsRemove(idx, btn) {
+  var loc = favsRegistry[idx];
+  toggleFav(loc);
+  renderFavs();
+  renderMarkers();
+}
+
+// ── TABS & FILTERS ────────────────────────────────────────────────────
+function showTab(t) {
+  activeTab = t;
+  ['map','list','favs'].forEach(function(k) {
+    document.getElementById('tab-'+k).className = 'tab-btn'+(k===t?' active':'');
+  });
+  document.getElementById('map').style.display = t==='map' ? 'block' : 'none';
+  document.getElementById('list-view').style.display = t==='list' ? 'flex' : 'none';
+  document.getElementById('favs-view').style.display = t==='favs' ? 'flex' : 'none';
+  if (t==='map') setTimeout(function(){map.invalidateSize();}, 50);
+  if (t==='list') renderList();
+  if (t==='favs') renderFavs();
+}
+
+function setFilter(f) {
+  currentFilter = f;
+  ['all','fountain','washroom','restspot'].forEach(function(k) {
+    document.getElementById('btn-'+k).className = 'filter-btn'+(k===f?' active-'+k:'');
+  });
+  applyFilters();
+}
+
+function toggleOpen() {
+  showOpenOnly = !showOpenOnly;
+  document.getElementById('btn-open').className = 'filter-btn'+(showOpenOnly?' active-open':'');
+  applyFilters();
+}
+
+// ── NEIGHBOURHOOD SEARCH ──────────────────────────────────────────────
+document.getElementById('neighbourhood-input').addEventListener('input', function() {
+  var val = this.value;
+  document.getElementById('clear-btn').style.display = val ? 'block' : 'none';
+  var sug = document.getElementById('suggestions');
+  if (!val) { sug.style.display='none'; neighbourhoodFilter=''; applyFilters(); return; }
+  var matches = allNeighbourhoods.filter(function(n){return n.toLowerCase().indexOf(val.toLowerCase())>=0;}).slice(0,8);
+  if (matches.length) {
+    sug.innerHTML = matches.map(function(m) {
+      return '<div class="suggestion-item" data-name="'+m+'">'+m+'</div>';
+    }).join('');
+    sug.style.display = 'block';
+  } else { sug.style.display='none'; }
+  neighbourhoodFilter = val;
+  applyFilters();
+});
+
+document.getElementById('suggestions').addEventListener('click', function(e) {
+  var item = e.target.closest('.suggestion-item');
+  if (!item) return;
+  var n = item.getAttribute('data-name');
+  document.getElementById('neighbourhood-input').value = n;
+  document.getElementById('suggestions').style.display = 'none';
+  document.getElementById('clear-btn').style.display = 'block';
+  neighbourhoodFilter = n;
+  applyFilters();
+});
+
+document.getElementById('clear-btn').addEventListener('click', function() {
+  document.getElementById('neighbourhood-input').value = '';
+  document.getElementById('clear-btn').style.display = 'none';
+  document.getElementById('suggestions').style.display = 'none';
+  neighbourhoodFilter = ''; applyFilters();
+});
+
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.search-row')) document.getElementById('suggestions').style.display = 'none';
+});
+
+// ── BUTTONS ───────────────────────────────────────────────────────────
+document.getElementById('btn-all').addEventListener('click', function(){setFilter('all');});
+document.getElementById('btn-fountain').addEventListener('click', function(){setFilter('fountain');});
+document.getElementById('btn-washroom').addEventListener('click', function(){setFilter('washroom');});
+document.getElementById('btn-restspot').addEventListener('click', function(){setFilter('restspot');});
+document.getElementById('btn-open').addEventListener('click', function(){toggleOpen();});
+document.getElementById('tab-map').addEventListener('click', function(){showTab('map');});
+document.getElementById('tab-list').addEventListener('click', function(){showTab('list');});
+document.getElementById('tab-favs').addEventListener('click', function(){showTab('favs');});
+
+document.getElementById('locate-btn').addEventListener('click', function() {
+  if (!navigator.geolocation) { updateStatus('Geolocation not supported'); return; }
+  updateStatus('Getting your location...');
+  navigator.geolocation.getCurrentPosition(function(pos) {
+    userLat = pos.coords.latitude; userLng = pos.coords.longitude;
+    if (userMarker) map.removeLayer(userMarker);
+    userMarker = L.circleMarker([userLat, userLng], {radius:8, fillColor:'#185FA5', color:'white', weight:2, fillOpacity:1}).addTo(map);
+    map.setView([userLat, userLng], 15);
+    applyFilters();
+    updateStatus('Sorted by distance from your location');
+  }, function() { updateStatus('Location access denied'); });
+});
+
+// ── STATUS ────────────────────────────────────────────────────────────
+function updateStatus(msg) {
+  document.getElementById('status-text').textContent = msg;
+  var loading = msg.indexOf('Loading')>=0 || msg.indexOf('Getting')>=0 || msg.indexOf('proxy')>=0;
+  document.getElementById('loading-dot').style.display = loading ? 'block' : 'none';
+}
+
+window.addEventListener('resize', function(){ if (activeTab==='map') map.invalidateSize(); });
+
+// ── SUPABASE CONTRIBUTION FEATURE ────────────────────────────────────
+var SUPA_URL = 'https://wmmxtwzupqmtpkzzvypn.supabase.co';
+var SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndtbXh0d3p1cHFtdHBrenp2eXBuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAyNzcxODMsImV4cCI6MjA5NTg1MzE4M30.UeUvsvd21VrFOtPaJFZ9zRook5W1j16faOtx0jmOQl8';
+
+var contribLat = null, contribLng = null;
+var contribPhotoFile = null;
+var pickingPin = false;
+var pickMarker = null;
+
+// Open modal
+document.getElementById('add-place-btn').addEventListener('click', function() {
+  resetContribForm();
+  document.getElementById('contrib-modal').classList.add('visible');
+});
+document.getElementById('cancel-contrib-btn').addEventListener('click', closeContribModal);
+document.getElementById('success-close-btn').addEventListener('click', closeContribModal);
+
+function closeContribModal() {
+  document.getElementById('contrib-modal').classList.remove('visible');
+  document.getElementById('pin-picker-overlay').classList.remove('visible');
+  if (pickingPin) cancelPinPick();
+  resetContribForm();
+}
+
+function resetContribForm() {
+  document.getElementById('contrib-type').value = '';
+  document.getElementById('contrib-name').value = '';
+  document.getElementById('contrib-notes').value = '';
+  document.getElementById('photo-upload-area').classList.remove('has-photo');
+  document.getElementById('photo-upload-area').innerHTML = '<div class="photo-upload-text"><i class="ti ti-camera"></i>Tap to take a photo or upload one</div><input type="file" id="photo-input" accept="image/*" capture="environment" style="display:none"/>';
+  document.getElementById('photo-upload-area').onclick = function(){ document.getElementById('photo-input').click(); };
+  document.getElementById('photo-input').addEventListener('change', handlePhotoSelect);
+  document.getElementById('photo-required-note').style.display = 'none';
+  document.getElementById('loc-coords').textContent = '';
+  document.getElementById('contrib-form-view').style.display = 'block';
+  document.getElementById('contrib-success-view').style.display = 'none';
+  contribLat = null; contribLng = null; contribPhotoFile = null;
+}
+
+// Photo selection
+document.getElementById('photo-input').addEventListener('change', handlePhotoSelect);
+function handlePhotoSelect(e) {
+  var file = e.target.files[0];
+  if (!file) return;
+  contribPhotoFile = file;
+  var reader = new FileReader();
+  reader.onload = function(ev) {
+    var area = document.getElementById('photo-upload-area');
+    area.classList.add('has-photo');
+    area.innerHTML = '<img src="'+ev.target.result+'" alt="Preview"/><div style="padding:8px;font-size:11px;color:#3B9E5A;text-align:center"><i class="ti ti-check"></i> Photo added — tap to change</div><input type="file" id="photo-input" accept="image/*" capture="environment" style="display:none"/>';
+    area.onclick = function(){ document.getElementById('photo-input').click(); };
+    document.getElementById('photo-input').addEventListener('change', handlePhotoSelect);
+    document.getElementById('photo-required-note').style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+}
+
+// GPS location
+document.getElementById('use-gps-btn').addEventListener('click', function() {
+  var btn = this;
+  btn.innerHTML = '<i class="ti ti-loader"></i> Getting location...';
+  navigator.geolocation.getCurrentPosition(function(pos) {
+    contribLat = pos.coords.latitude;
+    contribLng = pos.coords.longitude;
+    document.getElementById('loc-coords').textContent = '📍 ' + contribLat.toFixed(5) + ', ' + contribLng.toFixed(5);
+    btn.innerHTML = '<i class="ti ti-current-location"></i> Use my GPS';
+    btn.classList.add('active');
+    document.getElementById('use-map-btn').classList.remove('active');
+  }, function() {
+    btn.innerHTML = '<i class="ti ti-current-location"></i> Use my GPS';
+    document.getElementById('loc-coords').textContent = 'Could not get location — try Pick on map';
+  });
+});
+
+// Map pin picker
+document.getElementById('use-map-btn').addEventListener('click', function() {
+  document.getElementById('contrib-modal').classList.remove('visible');
+  document.getElementById('pin-picker-overlay').classList.add('visible');
+  pickingPin = true;
+  map.once('click', function(e) {
+    contribLat = e.latlng.lat;
+    contribLng = e.latlng.lng;
+    if (pickMarker) map.removeLayer(pickMarker);
+    pickMarker = L.marker([contribLat, contribLng], {
+      icon: L.divIcon({
+        className: '',
+        html: '<div style="width:16px;height:16px;border-radius:50%;background:#E8A020;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.4)"></div>',
+        iconSize:[16,16], iconAnchor:[8,8]
+      })
+    }).addTo(map);
+    document.getElementById('pin-picker-overlay').classList.remove('visible');
+    document.getElementById('contrib-modal').classList.add('visible');
+    document.getElementById('loc-coords').textContent = '📍 ' + contribLat.toFixed(5) + ', ' + contribLng.toFixed(5);
+    document.getElementById('use-map-btn').classList.add('active');
+    document.getElementById('use-gps-btn').classList.remove('active');
+    pickingPin = false;
+  });
+});
+
+function cancelPinPick() {
+  pickingPin = false;
+  map.off('click');
+  document.getElementById('pin-picker-overlay').classList.remove('visible');
+  document.getElementById('contrib-modal').classList.add('visible');
+}
+
+// Submit
+document.getElementById('submit-contrib-btn').addEventListener('click', async function() {
+  var type = document.getElementById('contrib-type').value;
+  var name = document.getElementById('contrib-name').value.trim();
+  var notes = document.getElementById('contrib-notes').value.trim();
+
+  // Validate
+  if (!type || !name) { alert('Please fill in the type and name.'); return; }
+  if (!contribPhotoFile) {
+    document.getElementById('photo-required-note').style.display = 'block';
+    document.getElementById('photo-upload-area').scrollIntoView({behavior:'smooth'});
+    return;
+  }
+  if (!contribLat || !contribLng) { alert('Please set a location using GPS or the map pin.'); return; }
+
+  var btn = document.getElementById('submit-contrib-btn');
+  btn.disabled = true;
+  btn.textContent = 'Uploading photo...';
+
+  try {
+    // 1. Upload photo to Supabase Storage
+    var ext = contribPhotoFile.name.split('.').pop() || 'jpg';
+    var fileName = 'contrib_' + Date.now() + '.' + ext;
+    var uploadRes = await fetch(SUPA_URL + '/storage/v1/object/submissions/' + fileName, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + SUPA_KEY,
+        'Content-Type': contribPhotoFile.type,
+        'x-upsert': 'true'
+      },
+      body: contribPhotoFile
+    });
+    if (!uploadRes.ok) throw new Error('Photo upload failed');
+    var photoUrl = SUPA_URL + '/storage/v1/object/public/submissions/' + fileName;
+
+    btn.textContent = 'Submitting...';
+
+    // 2. Insert row into contributions table
+    var insertRes = await fetch(SUPA_URL + '/rest/v1/contributions', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + SUPA_KEY,
+        'apikey': SUPA_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify({
+        type: type,
+        name: name,
+        description: notes,
+        lat: contribLat,
+        lng: contribLng,
+        photo_url: photoUrl,
+        status: 'pending'
+      })
+    });
+    if (!insertRes.ok) throw new Error('Submission failed');
+
+    // Show success
+    if (pickMarker) { map.removeLayer(pickMarker); pickMarker = null; }
+    document.getElementById('contrib-form-view').style.display = 'none';
+    document.getElementById('contrib-success-view').style.display = 'block';
+
+  } catch(err) {
+    alert('Something went wrong: ' + err.message + '. Please try again.');
+    btn.disabled = false;
+    btn.textContent = 'Submit for Review';
+  }
+});
+
+// Load and show approved community contributions on the map
+async function loadCommunityContributions() {
+  try {
+    var res = await fetch(SUPA_URL + '/rest/v1/contributions?status=eq.approved&select=*', {
+      headers: { 'Authorization': 'Bearer ' + SUPA_KEY, 'apikey': SUPA_KEY }
+    });
+    if (!res.ok) return;
+    var approved = await res.json();
+    approved.forEach(function(c) {
+      var color = c.type==='fountain'?'#4AADE8':c.type==='washroom'?'#D85A30':'#3B9E5A';
+      var m = L.marker([c.lat, c.lng], {
+        icon: L.divIcon({
+          className: '',
+          html: '<div style="position:relative;width:16px;height:16px;border-radius:50%;background:'+color+';border:3px solid white;box-shadow:0 1px 5px rgba(0,0,0,0.4)"><div style="position:absolute;top:-7px;right:-7px;font-size:9px">👥</div></div>',
+          iconSize:[16,16], iconAnchor:[8,8], popupAnchor:[0,-10]
+        })
+      });
+      var typeLabel = c.type==='fountain'?'Free Drinking Water':c.type==='washroom'?'Public Washroom':'Rest Spot';
+      var photoHtml = c.photo_url ? '<img src="'+c.photo_url+'" style="width:100%;border-radius:6px;margin-bottom:8px;max-height:140px;object-fit:cover"/>' : '';
+      m.bindPopup('<div style="padding:10px">'+photoHtml+'<div style="font-size:10px;font-weight:600;text-transform:uppercase;color:'+color+';margin-bottom:3px">'+typeLabel+' · Community</div><div style="font-size:14px;font-weight:600;margin-bottom:6px">'+c.name+'</div>'+(c.description?'<div style="font-size:12px;color:#5f5e5a">'+c.description+'</div>':'')+'</div><a style="display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;background:#0D3D6B;color:#fff;font-size:13px;font-weight:500;text-decoration:none" href="https://www.google.com/maps/dir/?api=1&destination='+c.lat+','+c.lng+'&travelmode=walking" target="_blank"><i class="ti ti-navigation"></i> Get directions</a>', {maxWidth:280,minWidth:240});
+      m.addTo(map);
+    });
+    if (approved.length > 0) updateStatus(approved.length + ' community spot'+(approved.length>1?'s':'')+' added!');
+  } catch(e) {}
+}
+
+fetchData();
+loadCommunityContributions();
+</script>
+</body>
+</html>
